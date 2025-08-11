@@ -1145,6 +1145,9 @@ This prevents accidental deployments and allows environment-specific customizati
 - [Terraform AzureRM Provider Documentation](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs)
 - [Azure Sentinel GitHub](https://github.com/Azure/Azure-Sentinel)
 - [Microsoft ASIM Documentation](https://docs.microsoft.com/en-us/azure/sentinel/normalization)
+- [Confluence REST API](https://developer.atlassian.com/server/confluence/rest/)
+- [Storage Format Documentation](https://developer.atlassian.com/server/confluence/storage-format/)
+- [Authentication Methods](https://developer.atlassian.com/server/confluence/authentication/)
 
 
 **Last Updated**: August 5, 2025  

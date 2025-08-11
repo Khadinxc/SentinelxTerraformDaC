@@ -1,0 +1,73 @@
+name: Sentinel Templates Export
+on:
+  workflow_dispatch:  # Manual trigger from the GitHub UI
+#on:
+# schedule:
+#   - cron: '0 0 * * *'  # Runs daily at midnight
+# workflow_dispatch:      # Allows manual triggering
+
+jobs:
+  export-templates:
+    runs-on: windows-latest
+    env:
+      resourceGroup: 'rg-sentinel-lab'
+      workspaceName: 'law-sentinel'
+      subscriptionId: ${{ secrets.AZURE_SENTINEL_SUBSCRIPTIONID_b86c74cd3d0a487babaf0c63cb6d325f }}
+      clientId: ${{ secrets.AZURE_SENTINEL_CLIENTID_b86c74cd3d0a487babaf0c63cb6d325f }}
+      tenantId: ${{ secrets.AZURE_SENTINEL_TENANTID_b86c74cd3d0a487babaf0c63cb6d325f }}
+      workspaceId: '8e3e5bd8-5db6-43bd-9e23-0755fea22b43'
+      directory: '${{ github.workspace }}'
+      cloudEnv: 'AzureCloud'
+    
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: 🔐 Login to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_SENTINEL_CLIENTID_b86c74cd3d0a487babaf0c63cb6d325f }}
+          tenant-id: ${{ secrets.AZURE_SENTINEL_TENANTID_b86c74cd3d0a487babaf0c63cb6d325f }}
+          subscription-id: ${{ secrets.AZURE_SENTINEL_SUBSCRIPTIONID_b86c74cd3d0a487babaf0c63cb6d325f }}
+          environment: 'AzureCloud'
+          audience: api://AzureADTokenExchange
+          enable-AzPSSession: true
+
+      - name: 📤 Export Sentinel Templates (JSON)
+        uses: azure/powershell@v2
+        with:
+          azPSVersion: 'latest'
+          inlineScript: |
+            Write-Host "Working directory: ${{ github.workspace }}"
+            & "${{ github.workspace }}\scripts\azure-sentinel-templates-export.ps1"
+
+      - name: 🔄 Convert exported templates to YAML
+        shell: pwsh
+        run: |
+          Write-Host "Running json-to-yaml-templates.ps1 to convert templates..."
+          & "${{ github.workspace }}\scripts\json-to-yaml-templates.ps1"
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update Sentinel templates [skip ci]"
+          title: "🔄 Update Sentinel Templates"
+          body: |
+            Automated PR to update Sentinel templates
+            
+            Changes include updates to:
+            - Analytics Rules (JSON & YAML)
+            - Hunting Queries (JSON & YAML)
+            
+            Please review the changes and merge if appropriate.
+          branch: sentinel-export-${{ github.run_id }}
+          base: main
+          draft: false
+          delete-branch: true

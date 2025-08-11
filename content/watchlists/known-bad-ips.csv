@@ -1,0 +1,5 @@
+IPAddress,ThreatType,Confidence,FirstSeen,testcolumn,Source
+192.0.2.1,Malware,High,2025-01-15T10:30:00Z,Test Value,Internal Analysis
+203.0.113.5,Phishing,High,2024-02-10,Test Value,External Feed
+198.51.100.42,C2,Medium,2024-03-05T10:30:00Z,Test Value,Community Intelligence
+198.51.101.45,C2,High,2024-03-05T10:30:00Z,Test Value, Community Intel

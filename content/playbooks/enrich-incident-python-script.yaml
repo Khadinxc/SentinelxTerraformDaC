@@ -1,0 +1,125 @@
+name: "enrich-incident-python-script"
+display_name: "Enrich Incident with Threat Intelligence - Python"
+description: "Python script to enrich Sentinel incidents with external threat intelligence data"
+enabled: true
+execution_type: "Script"        # Script vs LogicApp
+playbook_type: "Investigation"  # Incident, Notification, Investigation, Remediation
+script_type: "Python"          # PowerShell, Python, GraphPowerShell
+severity: "Medium"
+trigger_type: "Sentinel"        # Sentinel, HTTP, Schedule, Manual
+author: "SentinelDaC"
+version: "1.0"
+
+# Python script content
+script_content: |
+  import requests
+  import json
+  import sys
+  import logging
+  from datetime import datetime
+  
+  # Configure logging
+  logging.basicConfig(level=logging.INFO)
+  logger = logging.getLogger(__name__)
+  
+  def enrich_incident(incident_id, suspicious_ip, incident_title):
+      """
+      Enrich Sentinel incident with threat intelligence data
+      """
+      logger.info(f"Starting threat intelligence enrichment for incident: {incident_id}")
+      logger.info(f"Analyzing IP: {suspicious_ip}")
+      
+      try:
+          # Example: Query VirusTotal API (replace with your preferred TI source)
+          vt_api_key = "YOUR_VT_API_KEY"  # Should be stored in Azure Key Vault
+          
+          # Mock threat intelligence enrichment (replace with actual API calls)
+          enrichment_data = {
+              "timestamp": datetime.now().isoformat(),
+              "analyzed_ip": suspicious_ip,
+              "threat_score": 85,
+              "reputation": "malicious",
+              "categories": ["malware", "botnet"],
+              "first_seen": "2025-01-15T10:30:00Z",
+              "last_seen": "2025-08-03T14:22:00Z",
+              "geolocation": {
+                  "country": "Unknown",
+                  "city": "Unknown"
+              },
+              "sources": ["internal_analysis", "threat_feed"]
+          }
+          
+          # Create enrichment comment for Sentinel incident
+          comment = f"""
+  🔍 AUTOMATED THREAT INTELLIGENCE ENRICHMENT
+  
+  📊 Analysis Results for IP: {suspicious_ip}
+  • Threat Score: {enrichment_data['threat_score']}/100
+  • Reputation: {enrichment_data['reputation'].upper()}
+  • Categories: {', '.join(enrichment_data['categories'])}
+  • First Seen: {enrichment_data['first_seen']}
+  • Last Seen: {enrichment_data['last_seen']}
+  
+  🌍 Geolocation:
+  • Country: {enrichment_data['geolocation']['country']}
+  • City: {enrichment_data['geolocation']['city']}
+  
+  📅 Enrichment completed at: {enrichment_data['timestamp']}
+  """
+          
+          logger.info("Threat intelligence enrichment completed successfully")
+          logger.info(f"Threat Score: {enrichment_data['threat_score']}")
+          logger.info(f"Reputation: {enrichment_data['reputation']}")
+          
+          # In a real implementation, update the Sentinel incident via REST API
+          logger.info(f"Incident {incident_id} enriched with threat intelligence data")
+          
+          print(json.dumps({
+              "status": "success",
+              "incident_id": incident_id,
+              "enrichment": enrichment_data,
+              "comment": comment
+          }, indent=2))
+          
+          return enrichment_data
+          
+      except Exception as e:
+          error_msg = f"❌ Threat intelligence enrichment failed: {str(e)}"
+          logger.error(error_msg)
+          
+          print(json.dumps({
+              "status": "error",
+              "incident_id": incident_id,
+              "error": str(e)
+          }, indent=2))
+          
+          raise
+  
+  # Main execution
+  if __name__ == "__main__":
+      # Parse arguments (passed from Sentinel webhook)
+      import argparse
+      
+      parser = argparse.ArgumentParser(description='Enrich Sentinel incident with threat intelligence')
+      parser.add_argument('--incident-id', required=True, help='Sentinel incident ID')
+      parser.add_argument('--suspicious-ip', required=True, help='Suspicious IP address to analyze')
+      parser.add_argument('--incident-title', required=True, help='Incident title')
+      
+      args = parser.parse_args()
+      
+      # Execute enrichment
+      enrich_incident(args.incident_id, args.suspicious_ip, args.incident_title)
+
+# Parameters that Sentinel will pass to the script
+parameters:
+  incident-id: "@{triggerBody()?['object']?['properties']?['incidentNumber']}"
+  suspicious-ip: "@{triggerBody()?['ExtendedProperties']?['SuspiciousIP']}"
+  incident-title: "@{triggerBody()?['object']?['properties']?['title']}"
+
+# Additional tags
+tags:
+  Team: "Security"
+  Purpose: "Threat Intelligence"
+  Environment: "dev"
+  ScriptType: "Python"
+  Action: "Enrich Data"

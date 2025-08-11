@@ -1,0 +1,20 @@
+display_name: "Automatic Malicious IP Blocking"
+description: "Automatically block malicious IPs detected in high severity incidents"
+enabled: true
+order: 200
+conditions:
+  - property: "IncidentSeverity"
+    operator: "Equals"
+    values: ["High"]
+actions:
+  - order: 1
+    action_type: "RunPlaybook"
+    # NOTE: Replace with your actual subscription ID and resource group
+    logic_app_resource_id: "/subscriptions/[YOUR_AZURE_SUBSCRIPTION_ID]/resourceGroups/rg-sentinel-dev/providers/Microsoft.Logic/workflows/block-malicious-ip-script-webhook-caller"
+    tenant_id: "d8b5b37c-5c6b-4b5c-9c8c-d5e3e9f0b1a2"
+tags:
+  Team: "Security"
+  Purpose: "Automated Response"
+  Environment: "dev"
+  PlaybookType: "Remediation"
+  ExecutionType: "Script"

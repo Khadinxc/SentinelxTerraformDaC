@@ -1,0 +1,6 @@
+display_name: "Microsoft Defender for Identity"
+description: "Creates incidents for alerts from Microsoft Defender for Identity"
+enabled: true
+product_filter: "Azure Advanced Threat Protection"
+alert_rule_template_guid: "40375cab-fbf1-4e52-9664-d94b643ba2ef"
+alert_rule_template_version: "1.0.0"

@@ -1,0 +1,40 @@
+display_name: "Suspicious Login Activity Detection"
+description: "Detects suspicious login activities based on failed login attempts and unusual locations"
+severity: "High"
+enabled: true
+query: |
+  SigninLogs
+  | where TimeGenerated > ago(1h)
+  | where ResultType != "0"
+  | summarize FailedAttempts = count() by UserPrincipalName, IPAddress, bin(TimeGenerated, 5m)
+  | where FailedAttempts >= 5
+  | project TimeGenerated, UserPrincipalName, IPAddress, FailedAttempts
+query_frequency: "PT1H"
+query_period: "PT1H"
+trigger_operator: "GreaterThan"
+trigger_threshold: 0
+suppression_enabled: false
+suppression_duration: "PT1H"
+tactics:
+  - "CredentialAccess"
+  - "InitialAccess"
+techniques:
+  - "T1110"
+  - "T1078"
+entity_mappings:
+  - entity_type: "Account"
+    field_mappings:
+      - identifier: "FullName"
+        column_name: "UserPrincipalName"
+  - entity_type: "IP"
+    field_mappings:
+      - identifier: "Address"
+        column_name: "IPAddress"
+incident_configuration:
+  create_incident: true
+  grouping_enabled: false
+custom_details:
+  FailedAttempts: "FailedAttempts"
+  SourceIP: "IPAddress"
+event_grouping:
+  aggregation_method: "SingleAlert"

@@ -1,0 +1,35 @@
+display_name: "Suspicious PowerShell Activity"
+description: "Hunt for suspicious PowerShell commands that may indicate malicious activity"
+enabled: true
+category: "Execution"
+severity: "Medium"
+tactics:
+  - "Execution"
+  - "Defense Evasion"
+techniques:
+  - "T1059.001"
+  - "T1027"
+query: |
+  DeviceProcessEvents
+  | where TimeGenerated > ago(24h)
+  | where ProcessCommandLine has_any ("powershell", "pwsh")
+  | where ProcessCommandLine has_any (
+      "invoke-expression", "iex", "invoke-command", "icm",
+      "downloadstring", "downloadfile", "bitstransfer",
+      "bypass", "unrestricted", "hidden", "encodedcommand",
+      "base64", "compressed", "reflection.assembly"
+  )
+  | extend SuspiciousIndicators = array_length(split(ProcessCommandLine, " "))
+  | where SuspiciousIndicators > 5
+  | project TimeGenerated, DeviceName, AccountName, ProcessCommandLine, ParentProcessName
+  | order by TimeGenerated desc
+data_sources:
+  - "Microsoft Defender for Endpoint"
+  - "Sysmon"
+references:
+  - "https://attack.mitre.org/techniques/T1059/001/"
+  - "https://docs.microsoft.com/en-us/powershell/scripting/learn/security"
+tags:
+  Environment: "dev"
+  Purpose: "threat-hunting"
+  Team: "security"

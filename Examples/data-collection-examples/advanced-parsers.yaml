@@ -1,0 +1,99 @@
+# Advanced Parser Examples for Data Collection Rules
+# Updated with working DCR patterns from successful API logs implementation
+
+# Example 1: DNS Query Parser (JSON Format)
+dns_parser:
+  name: "dcr-dns-parser-dev"
+  data_type: "custom"
+  facilities: []
+  log_levels: []
+  destinations: ["primary"]
+  data_collection_endpoint_key: "api_ingestion"  # Links to your DCE
+  
+  # No stream declarations needed for API ingestion - Azure will create the table automatically
+  stream_declarations: {}
+  output_stream: "Custom-DNSParsed_CL"  # Must end with _CL for custom tables
+  
+  # KQL transformation to parse incoming JSON DNS data
+  transform_kql: "source | extend TimeGenerated = coalesce(todatetime(RawData.timestamp), todatetime(RawData.TimeGenerated), now()), Computer = tostring(coalesce(RawData.computer, RawData.Computer, \"Unknown\")), QueryName = tostring(coalesce(RawData.query_name, RawData.QueryName, \"\")), QueryType = tostring(coalesce(RawData.query_type, RawData.QueryType, \"A\")), ResponseCode = toint(coalesce(RawData.response_code, RawData.ResponseCode, 0)), ClientIP = tostring(coalesce(RawData.client_ip, RawData.ClientIP, \"\")), ThreatIndicator = case(tostring(RawData.query_name) has_any (\"malware\", \"phishing\", \"botnet\"), \"Malicious Domain\", tostring(RawData.query_name) has_any (\"dga\", \"random\"), \"DGA Suspicious\", tostring(RawData.query_name) has_any (\"tor\", \"proxy\"), \"Anonymization\", \"Clean\"), IsMalicious = case(tostring(RawData.query_name) has_any (\"malware\", \"phishing\", \"botnet\", \"dga\", \"random\", \"tor\", \"proxy\"), true, false), RiskScore = case(tostring(RawData.query_name) has_any (\"malware\", \"phishing\", \"botnet\"), 9, tostring(RawData.query_name) has_any (\"dga\", \"random\"), 7, tostring(RawData.query_name) has_any (\"tor\", \"proxy\"), 5, toint(RawData.response_code) == 3, 3, 1) | project TimeGenerated, Computer, QueryName, QueryType, ResponseCode, ClientIP, ThreatIndicator, IsMalicious, RiskScore"
+
+# Example 2: Firewall Log Parser (Pipe-Delimited Format)
+firewall_parser:
+  name: "dcr-firewall-parser-dev"
+  data_type: "custom"
+  facilities: []
+  log_levels: []
+  destinations: ["primary"]
+  data_collection_endpoint_key: "api_ingestion"  # Links to your DCE
+  
+  # No stream declarations needed for API ingestion
+  stream_declarations: {}
+  output_stream: "Custom-FirewallParsed_CL"  # Must end with _CL for custom tables
+  
+  # KQL transformation to parse pipe-delimited firewall logs
+  transform_kql: "source | extend LogParts = split(RawData, \"|\") | extend TimeGenerated = coalesce(todatetime(LogParts[0]), now()), DeviceName = tostring(coalesce(LogParts[1], \"Unknown\")), Action = tostring(coalesce(LogParts[2], \"UNKNOWN\")), Protocol = tostring(coalesce(LogParts[3], \"TCP\")), SourceIP = tostring(coalesce(LogParts[4], \"0.0.0.0\")), DestinationIP = tostring(coalesce(LogParts[5], \"0.0.0.0\")), SourcePort = toint(coalesce(LogParts[6], 0)), DestinationPort = toint(coalesce(LogParts[7], 0)), BytesTransferred = tolong(coalesce(LogParts[8], 0)), ThreatCategory = case(toint(LogParts[7]) in (22, 3389) and tostring(LogParts[2]) == \"DENY\", \"Brute Force Attempt\", toint(LogParts[7]) in (445, 139) and tostring(LogParts[2]) == \"DENY\", \"SMB Attack\", toint(LogParts[7]) in (80, 443) and tolong(LogParts[8]) > 100000000, \"Data Exfiltration\", tostring(LogParts[4]) has_any (\"192.168\", \"10.\", \"172.\") and tostring(LogParts[5]) !has_any (\"192.168\", \"10.\", \"172.\"), \"Outbound Communication\", tostring(LogParts[2]) == \"DENY\", \"Blocked Connection\", \"Normal Traffic\"), IsBlocked = tostring(LogParts[2]) == \"DENY\", RiskScore = case(toint(LogParts[7]) in (22, 3389) and tostring(LogParts[2]) == \"DENY\", 8, toint(LogParts[7]) in (445, 139) and tostring(LogParts[2]) == \"DENY\", 7, toint(LogParts[7]) in (80, 443) and tolong(LogParts[8]) > 100000000, 9, tostring(LogParts[4]) has_any (\"192.168\", \"10.\", \"172.\") and tostring(LogParts[5]) !has_any (\"192.168\", \"10.\", \"172.\") and tostring(LogParts[2]) == \"DENY\", 6, tostring(LogParts[2]) == \"DENY\", 4, 1) | project TimeGenerated, DeviceName, Action, Protocol, SourceIP, DestinationIP, SourcePort, DestinationPort, BytesTransferred, ThreatCategory, IsBlocked, RiskScore"
+
+# Example 3: Web Access Log Parser (Apache/Nginx Common Log Format)
+web_access_parser:
+  name: "dcr-web-access-parser-dev"
+  data_type: "custom"
+  facilities: []
+  log_levels: []
+  destinations: ["primary"]
+  data_collection_endpoint_key: "api_ingestion"  # Links to your DCE
+  
+  # No stream declarations needed for API ingestion
+  stream_declarations: {}
+  output_stream: "Custom-WebAccessParsed_CL"  # Must end with _CL for custom tables
+  
+  # KQL transformation to parse Apache/Nginx access logs
+  transform_kql: "source | parse RawData with ClientIP \" - - [\" Timestamp \"] \\\"\" Method \" \" UriPath \" \" Protocol \"\\\" \" StatusCode:int \" \" ResponseSize:long \" \\\"\" Referer \"\\\" \\\"\" UserAgent \"\\\"\" | extend TimeGenerated = coalesce(todatetime(Timestamp), now()), ServerName = \"WebServer\", AttackType = case(UriPath has_any (\"sql\", \"union\", \"select\", \"drop\"), \"SQL Injection\", UriPath has_any (\"script\", \"javascript\", \"alert\"), \"XSS Attack\", UriPath has_any (\"../\", \"..\\\\\", \"..%2f\"), \"Directory Traversal\", UriPath has_any (\"cmd\", \"powershell\", \"bash\"), \"Command Injection\", UserAgent has_any (\"bot\", \"crawler\", \"scanner\"), \"Automated Tool\", StatusCode == 404 and UriPath has_any (\"admin\", \"config\", \"backup\"), \"Reconnaissance\", \"Normal Request\"), IsSuspicious = AttackType != \"Normal Request\", RiskScore = case(AttackType == \"SQL Injection\", 9, AttackType == \"Command Injection\", 9, AttackType == \"XSS Attack\", 7, AttackType == \"Directory Traversal\", 8, AttackType == \"Reconnaissance\", 5, AttackType == \"Automated Tool\", 3, StatusCode >= 500, 2, 1) | project TimeGenerated, ServerName, ClientIP, Method, UriPath, StatusCode, ResponseSize, UserAgent, Referer, AttackType, IsSuspicious, RiskScore"
+
+# Example 4: Azure Activity Log Parser (JSON Format)
+azure_activity_parser:
+  name: "dcr-azure-activity-parser-dev"
+  data_type: "custom"
+  facilities: []
+  log_levels: []
+  destinations: ["primary"]
+  data_collection_endpoint_key: "api_ingestion"  # Links to your DCE
+  
+  # No stream declarations needed for API ingestion
+  stream_declarations: {}
+  output_stream: "Custom-AzureActivityParsed_CL"  # Must end with _CL for custom tables
+  
+  # KQL transformation to parse Azure Activity logs (JSON format)
+  transform_kql: "source | extend TimeGenerated = coalesce(todatetime(RawData.eventTime), todatetime(RawData.TimeGenerated), now()), SubscriptionId = tostring(coalesce(RawData.subscriptionId, RawData.SubscriptionId, \"\")), ResourceGroup = tostring(coalesce(RawData.resourceGroupName, RawData.ResourceGroup, \"\")), ResourceName = tostring(coalesce(RawData.resourceId, RawData.ResourceName, \"\")), OperationName = tostring(coalesce(RawData.operationName, RawData.OperationName, \"\")), ActivityStatus = tostring(coalesce(RawData.status, RawData.ActivityStatus, \"\")), Caller = tostring(coalesce(RawData.caller, RawData.Caller, \"\")), CallerIPAddress = tostring(coalesce(RawData.callerIpAddress, RawData.CallerIPAddress, \"\")), PrivilegeLevel = case(tostring(RawData.operationName) has_any (\"Delete\", \"Write\", \"Action\"), \"High\", tostring(RawData.operationName) has \"Read\", \"Low\", \"Medium\"), ThreatCategory = case(tostring(RawData.operationName) has_any (\"RoleAssignment\", \"Policy\", \"Permission\"), \"Privilege Management\", tostring(RawData.operationName) has_any (\"Storage\", \"Blob\", \"File\"), \"Data Access\", tostring(RawData.operationName) has_any (\"VirtualMachine\", \"Compute\"), \"Infrastructure Change\", tostring(RawData.operationName) has_any (\"Network\", \"Firewall\", \"SecurityGroup\"), \"Network Change\", tostring(RawData.operationName) has_any (\"Key\", \"Secret\", \"Certificate\"), \"Secret Management\", \"General Activity\"), IsHighRisk = PrivilegeLevel == \"High\" and ActivityStatus == \"Succeeded\", RiskScore = case(ThreatCategory == \"Privilege Management\" and IsHighRisk, 9, ThreatCategory == \"Secret Management\" and IsHighRisk, 8, ThreatCategory == \"Network Change\" and IsHighRisk, 7, ThreatCategory == \"Infrastructure Change\" and IsHighRisk, 6, IsHighRisk, 5, ActivityStatus == \"Failed\", 3, 1) | project TimeGenerated, SubscriptionId, ResourceGroup, ResourceName, OperationName, ActivityStatus, Caller, CallerIPAddress, PrivilegeLevel, ThreatCategory, IsHighRisk, RiskScore"
+
+# Example 5: CSV Format Parser (Generic)
+csv_parser:
+  name: "dcr-csv-parser-dev"
+  data_type: "custom"
+  facilities: []
+  log_levels: []
+  destinations: ["primary"]
+  data_collection_endpoint_key: "api_ingestion"  # Links to your DCE
+  
+  # No stream declarations needed for API ingestion
+  stream_declarations: {}
+  output_stream: "Custom-CSVParsed_CL"  # Must end with _CL for custom tables
+  
+  # KQL transformation to parse CSV data (expects: timestamp,level,source,message,user)
+  transform_kql: "source | extend parsed = split(RawData, ',') | extend TimeGenerated = todatetime(parsed[0]), Level = tostring(parsed[1]), Source = tostring(parsed[2]), Message = tostring(parsed[3]), Username = tostring(parsed[4]) | project TimeGenerated, Level, Source, Message, Username"
+
+# Working Example Data Formats:
+# 
+# DNS JSON:
+# {"timestamp": "2025-08-08T10:30:00Z", "computer": "dns-server-01", "query_name": "malicious.example.com", "query_type": "A", "response_code": 0, "client_ip": "192.168.1.100"}
+#
+# Firewall Pipe-Delimited:
+# 2025-08-08T10:30:00Z|firewall-01|DENY|TCP|192.168.1.100|10.0.0.1|12345|22|1024
+#
+# Web Access Log:
+# 192.168.1.100 - - [08/Aug/2025:10:30:00 +0000] "GET /admin/login HTTP/1.1" 404 512 "http://example.com" "Mozilla/5.0"
+#
+# Azure Activity JSON:
+# {"eventTime": "2025-08-08T10:30:00Z", "operationName": "Microsoft.Storage/storageAccounts/write", "status": "Succeeded", "caller": "user@domain.com", "callerIpAddress": "192.168.1.100"}
+#
+# CSV Format:
+# 2025-08-08T10:30:00Z,Info,WebApp,User login successful,john.doe

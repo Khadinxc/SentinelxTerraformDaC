@@ -1,0 +1,188 @@
+# Push Wiki to Confluence Pipeline
+# Manually triggered pipeline to push generated wiki to Confluence
+
+name: Push Wiki to Confluence
+
+on:
+  workflow_dispatch:
+    inputs:
+      wiki_file_path:
+        description: 'Path to the wiki Markdown file'
+        required: false
+        default: 'DetectionWiki/DetectionWiki.md'
+        type: string
+      confluence_environment:
+        description: 'Target Confluence environment'
+        required: false
+        default: 'development'
+        type: choice
+        options:
+        - development
+        - production
+      page_title:
+        description: 'Confluence page title'
+        required: false
+        default: 'Detection Rules Wiki'
+        type: string
+      force_update:
+        description: 'Force update even if page exists'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  # Default configuration - can be overridden by secrets
+  # NOTE: Create GitHub secrets in your repository for the following:
+  # - CONFLUENCE_URL: Your Confluence server URL
+  # - CONFLUENCE_SPACE_KEY: Your Confluence space key (e.g., "SECURITY")
+  # - CONFLUENCE_PARENT_PAGE_ID: Parent page ID for wiki pages
+  # - CONFLUENCE_ACCESS_TOKEN: Your Confluence API access token
+  DEFAULT_CONFLUENCE_URL: "[YOUR_CONFLUENCE_SERVER_URL]"
+  DEFAULT_SPACE_KEY: "[YOUR_CONFLUENCE_SPACE_KEY]"
+  DEFAULT_PARENT_PAGE_ID: "[YOUR_CONFLUENCE_PARENT_PAGE_ID]"
+  DEFAULT_ACCESS_TOKEN: "[YOUR_CONFLUENCE_ACCESS_TOKEN]"
+
+permissions:
+  contents: read
+
+jobs:
+  push-to-confluence:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Configure environment variables
+      shell: pwsh
+      run: |
+        $environment = "${{ github.event.inputs.confluence_environment }}"
+        if (-not $environment) { $environment = "development" }
+        
+        Write-Host "Configuring Confluence push for environment: $environment" -ForegroundColor Cyan
+        
+        # Use secrets if available, otherwise fall back to defaults
+        $confluenceUrl = if ("${{ secrets.CONFLUENCE_URL }}") { "${{ secrets.CONFLUENCE_URL }}" } else { "${{ env.DEFAULT_CONFLUENCE_URL }}" }
+        $spaceKey = if ("${{ secrets.CONFLUENCE_SPACE_KEY }}") { "${{ secrets.CONFLUENCE_SPACE_KEY }}" } else { "${{ env.DEFAULT_SPACE_KEY }}" }
+        $parentPageId = if ("${{ secrets.CONFLUENCE_PARENT_PAGE_ID }}") { "${{ secrets.CONFLUENCE_PARENT_PAGE_ID }}" } else { "${{ env.DEFAULT_PARENT_PAGE_ID }}" }
+        $accessToken = if ("${{ secrets.CONFLUENCE_ACCESS_TOKEN }}") { "${{ secrets.CONFLUENCE_ACCESS_TOKEN }}" } else { "${{ env.DEFAULT_ACCESS_TOKEN }}" }
+        
+        # Output to environment for subsequent steps
+        echo "CONFLUENCE_URL=$confluenceUrl" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        echo "CONFLUENCE_SPACE_KEY=$spaceKey" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        echo "CONFLUENCE_PARENT_PAGE_ID=$parentPageId" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        echo "CONFLUENCE_ACCESS_TOKEN=$accessToken" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        echo "CONFLUENCE_ENVIRONMENT=$environment" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        
+        Write-Host "✅ Environment configured" -ForegroundColor Green
+        Write-Host "   URL: $confluenceUrl" -ForegroundColor Gray
+        Write-Host "   Space: $spaceKey" -ForegroundColor Gray
+        Write-Host "   Parent Page ID: $parentPageId" -ForegroundColor Gray
+        Write-Host "   Environment: $environment" -ForegroundColor Gray
+        
+    - name: Validate wiki file exists
+      shell: pwsh
+      run: |
+        $wikiPath = "${{ github.event.inputs.wiki_file_path }}"
+        if (-not $wikiPath) { $wikiPath = "DetectionWiki/DetectionWiki.md" }
+        
+        Write-Host "Validating wiki file: $wikiPath" -ForegroundColor Cyan
+        
+        if (-not (Test-Path $wikiPath)) {
+            Write-Error "❌ Wiki file not found: $wikiPath"
+            Write-Host "Available files in DetectionWiki:" -ForegroundColor Yellow
+            if (Test-Path "DetectionWiki") {
+                Get-ChildItem "DetectionWiki" | ForEach-Object { Write-Host "   $($_.Name)" -ForegroundColor Gray }
+            } else {
+                Write-Host "   DetectionWiki directory not found" -ForegroundColor Red
+            }
+            exit 1
+        }
+        
+        $fileSize = (Get-Item $wikiPath).Length
+        Write-Host "✅ Wiki file validated" -ForegroundColor Green
+        Write-Host "   File: $wikiPath" -ForegroundColor Gray
+        Write-Host "   Size: $([Math]::Round($fileSize/1KB, 2)) KB" -ForegroundColor Gray
+        
+        echo "WIKI_FILE_PATH=$wikiPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        
+    - name: Test Confluence connectivity
+      shell: pwsh
+      run: |
+        Write-Host "Testing Confluence connectivity..." -ForegroundColor Cyan
+        
+        $headers = @{
+            'Authorization' = "Bearer ${{ env.CONFLUENCE_ACCESS_TOKEN }}"
+            'Content-Type' = 'application/json'
+        }
+        
+        try {
+            # Test basic connectivity by getting space information
+            $spaceUrl = "${{ env.CONFLUENCE_URL }}/rest/api/space/${{ env.CONFLUENCE_SPACE_KEY }}"
+            Write-Host "Testing URL: $spaceUrl" -ForegroundColor Gray
+            
+            $response = Invoke-RestMethod -Uri $spaceUrl -Headers $headers -TimeoutSec 30
+            
+            Write-Host "✅ Confluence connectivity test passed" -ForegroundColor Green
+            Write-Host "   Space Name: $($response.name)" -ForegroundColor Gray
+            Write-Host "   Space Key: $($response.key)" -ForegroundColor Gray
+            Write-Host "   Space Type: $($response.type)" -ForegroundColor Gray
+            
+        } catch {
+            Write-Error "❌ Confluence connectivity test failed: $($_.Exception.Message)"
+            Write-Host "Response details:" -ForegroundColor Red
+            if ($_.Exception.Response) {
+                Write-Host "   Status Code: $($_.Exception.Response.StatusCode)" -ForegroundColor Red
+                Write-Host "   Status Description: $($_.Exception.Response.StatusDescription)" -ForegroundColor Red
+            }
+            exit 1
+        }
+        
+    - name: Push wiki to Confluence
+      shell: pwsh
+      run: |
+        Write-Host "🚀 Pushing wiki to Confluence..." -ForegroundColor Cyan
+        
+        # Run the Confluence push script
+        $scriptPath = ".github/workflows/push-wiki-to-confluence.ps1"
+        
+        $params = @{
+            WikiFilePath = "${{ env.WIKI_FILE_PATH }}"
+            ConfluenceUrl = "${{ env.CONFLUENCE_URL }}"
+            SpaceKey = "${{ env.CONFLUENCE_SPACE_KEY }}"
+            ParentPageId = "${{ env.CONFLUENCE_PARENT_PAGE_ID }}"
+            AccessToken = "${{ env.CONFLUENCE_ACCESS_TOKEN }}"
+            PageTitle = "${{ github.event.inputs.page_title }}"
+            ForceUpdate = [bool]"${{ github.event.inputs.force_update }}"
+            Environment = "${{ env.CONFLUENCE_ENVIRONMENT }}"
+        }
+        
+        try {
+            & $scriptPath @params
+            Write-Host "✅ Wiki push completed successfully" -ForegroundColor Green
+        } catch {
+            Write-Error "❌ Wiki push failed: $($_.Exception.Message)"
+            exit 1
+        }
+        
+    - name: Summary
+      if: always()
+      shell: pwsh
+      run: |
+        Write-Host ""
+        Write-Host "🏁 Confluence Push Pipeline Summary" -ForegroundColor Cyan
+        Write-Host "==================================" -ForegroundColor Cyan
+        Write-Host "Wiki File: ${{ env.WIKI_FILE_PATH }}" -ForegroundColor Gray
+        Write-Host "Confluence: ${{ env.CONFLUENCE_URL }}" -ForegroundColor Gray
+        Write-Host "Space: ${{ env.CONFLUENCE_SPACE_KEY }}" -ForegroundColor Gray
+        Write-Host "Environment: ${{ env.CONFLUENCE_ENVIRONMENT }}" -ForegroundColor Gray
+        Write-Host "Page Title: ${{ github.event.inputs.page_title }}" -ForegroundColor Gray
+        
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host ""
+            Write-Host "✅ Push completed successfully!" -ForegroundColor Green
+            Write-Host "🌐 View the wiki at: ${{ env.CONFLUENCE_URL }}/spaces/${{ env.CONFLUENCE_SPACE_KEY }}" -ForegroundColor White
+        } else {
+            Write-Host ""
+            Write-Host "❌ Push failed - check the logs above" -ForegroundColor Red
+        }

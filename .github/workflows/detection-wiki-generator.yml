@@ -1,0 +1,322 @@
+# Detection Wiki Generator Pipeline
+# Generates Confluence-compatible HTML wiki from detection manifest and creates pull request
+
+name: Detection Wiki Generator
+
+on:
+  #schedule:
+    # Run daily at 2 AM UTC
+    #- cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      force_update:
+        description: 'Force update even if no changes detected'
+        required: false
+        default: false
+        type: boolean
+      confluence_environment:
+        description: 'Target Confluence environment'
+        required: false
+        default: 'development'
+        type: choice
+        options:
+        - development
+        - production
+
+env:
+  # Default configuration - can be overridden by secrets
+  # NOTE: Create GitHub secrets in your repository for the following:
+  # - CONFLUENCE_URL: Your Confluence server URL
+  # - CONFLUENCE_SPACE_KEY: Your Confluence space key (e.g., "SECURITY")  
+  # - CONFLUENCE_PARENT_PAGE_ID: Parent page ID for wiki pages
+  # - CONFLUENCE_ACCESS_TOKEN: Your Confluence API access token (optional for wiki generation)
+  DEFAULT_CONFLUENCE_URL: "[YOUR_CONFLUENCE_SERVER_URL]"
+  DEFAULT_SPACE_KEY: "[YOUR_CONFLUENCE_SPACE_KEY]"
+  DEFAULT_PARENT_PAGE_ID: "[YOUR_CONFLUENCE_PARENT_PAGE_ID]"
+  MANIFEST_PATH: ".sentinel/manifest.yaml"
+  WIKI_OUTPUT_PATH: "DetectionWiki"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  generate-wiki:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Install PowerShell modules
+      shell: pwsh
+      run: |
+        Write-Host "Installing required PowerShell modules..." -ForegroundColor Cyan
+        Install-Module -Name powershell-yaml -Force -Scope CurrentUser
+        Write-Host "✅ Modules installed successfully" -ForegroundColor Green
+        
+    - name: Configure environment variables
+      shell: pwsh
+      run: |
+        # Set environment-specific variables
+        $environment = "${{ github.event.inputs.confluence_environment }}"
+        if (-not $environment) { $environment = "development" }
+        
+        Write-Host "Configuring for environment: $environment" -ForegroundColor Cyan
+        
+        # Use secrets if available, otherwise fall back to defaults
+        $confluenceUrl = if ("${{ secrets.CONFLUENCE_URL }}") { "${{ secrets.CONFLUENCE_URL }}" } else { "${{ env.DEFAULT_CONFLUENCE_URL }}" }
+        $spaceKey = if ("${{ secrets.CONFLUENCE_SPACE_KEY }}") { "${{ secrets.CONFLUENCE_SPACE_KEY }}" } else { "${{ env.DEFAULT_SPACE_KEY }}" }
+        $parentPageId = if ("${{ secrets.CONFLUENCE_PARENT_PAGE_ID }}") { "${{ secrets.CONFLUENCE_PARENT_PAGE_ID }}" } else { "${{ env.DEFAULT_PARENT_PAGE_ID }}" }
+        $accessToken = "${{ secrets.CONFLUENCE_ACCESS_TOKEN }}"
+        
+        # Output to environment for subsequent steps
+        echo "CONFLUENCE_URL=$confluenceUrl" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        echo "CONFLUENCE_SPACE_KEY=$spaceKey" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        echo "CONFLUENCE_PARENT_PAGE_ID=$parentPageId" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        echo "CONFLUENCE_ENVIRONMENT=$environment" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        
+        Write-Host "✅ Environment configured" -ForegroundColor Green
+        Write-Host "   URL: $confluenceUrl" -ForegroundColor Gray
+        Write-Host "   Space: $spaceKey" -ForegroundColor Gray
+        Write-Host "   Environment: $environment" -ForegroundColor Gray
+        
+    - name: Validate manifest file
+      shell: pwsh
+      run: |
+        Write-Host "Validating manifest file..." -ForegroundColor Cyan
+        
+        if (-not (Test-Path "${{ env.MANIFEST_PATH }}")) {
+            Write-Error "❌ Manifest file not found: ${{ env.MANIFEST_PATH }}"
+            exit 1
+        }
+        
+        try {
+            $yamlContent = Get-Content -Path "${{ env.MANIFEST_PATH }}" -Raw
+            $manifest = ConvertFrom-Yaml $yamlContent
+            
+            if (-not $manifest.content.analyticsRules) {
+                Write-Error "❌ No analytics rules found in manifest"
+                exit 1
+            }
+            
+            $ruleCount = $manifest.content.analyticsRules.Count
+            Write-Host "✅ Manifest validated successfully" -ForegroundColor Green
+            Write-Host "   Rules found: $ruleCount" -ForegroundColor Gray
+            Write-Host "   Repository: $($manifest.repository)" -ForegroundColor Gray
+            Write-Host "   Branch: $($manifest.branch)" -ForegroundColor Gray
+            
+            # Store rule count for later use
+            echo "RULE_COUNT=$ruleCount" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            
+        } catch {
+            Write-Error "❌ Failed to parse manifest: $($_.Exception.Message)"
+            exit 1
+        }
+        
+    - name: Check for changes since last run
+      shell: pwsh
+      run: |
+        Write-Host "Checking for changes since last wiki generation..." -ForegroundColor Cyan
+        
+        $forceUpdate = "${{ github.event.inputs.force_update }}" -eq "true"
+        $hasChanges = $false
+        
+        # Check if manifest has changed
+        $manifestChanged = git diff --name-only HEAD~1..HEAD | Where-Object { $_ -match "\.sentinel/manifest\.yaml" }
+        if ($manifestChanged) {
+            Write-Host "📝 Manifest file has changed" -ForegroundColor Yellow
+            $hasChanges = $true
+        }
+        
+        # Check if any detection files have changed
+        $detectionChanged = git diff --name-only HEAD~1..HEAD | Where-Object { 
+            $_ -match "DetectionsYAML/" -or $_ -match "Detections/" 
+        }
+        if ($detectionChanged) {
+            Write-Host "📝 Detection files have changed: $($detectionChanged.Count) files" -ForegroundColor Yellow
+            $hasChanges = $true
+        }
+        
+        # Check if wiki generation script has changed
+        $scriptChanged = git diff --name-only HEAD~1..HEAD | Where-Object { $_ -match "Scripts/.*wiki.*\.ps1" }
+        if ($scriptChanged) {
+            Write-Host "📝 Wiki generation scripts have changed" -ForegroundColor Yellow
+            $hasChanges = $true
+        }
+        
+        if ($forceUpdate) {
+            Write-Host "🔄 Force update requested - proceeding regardless of changes" -ForegroundColor Yellow
+            $hasChanges = $true
+        }
+        
+        if (-not $hasChanges) {
+            Write-Host "ℹ️ No relevant changes detected - skipping wiki generation" -ForegroundColor Blue
+            echo "SKIP_GENERATION=true" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        } else {
+            Write-Host "✅ Changes detected - proceeding with wiki generation" -ForegroundColor Green
+            echo "SKIP_GENERATION=false" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        }
+        
+    - name: Generate detection wiki
+      if: env.SKIP_GENERATION != 'true'
+      shell: pwsh
+      run: |
+        Write-Host "🔧 Generating detection wiki (Markdown)..." -ForegroundColor Cyan
+        
+        # Run the Markdown wiki generation script
+        $scriptPath = ".github/workflows/generate-detection-wiki-markdown.ps1"
+        
+        $params = @{
+            ManifestPath = "${{ env.MANIFEST_PATH }}"
+            OutputPath = "${{ env.WIKI_OUTPUT_PATH }}"
+            RepositoryUrl = "${{ github.server_url }}/${{ github.repository }}"
+            Branch = "${{ github.ref_name }}"
+            Environment = "${{ env.CONFLUENCE_ENVIRONMENT }}"
+        }
+        
+        try {
+            & $scriptPath @params
+            Write-Host "✅ Markdown wiki generation completed successfully" -ForegroundColor Green
+        } catch {
+            Write-Error "❌ Wiki generation failed: $($_.Exception.Message)"
+            exit 1
+        }
+        
+    - name: Validate generated wiki
+      if: env.SKIP_GENERATION != 'true'
+      shell: pwsh
+      run: |
+        Write-Host "🔍 Validating generated wiki files..." -ForegroundColor Cyan
+        
+        $wikiFile = Join-Path "${{ env.WIKI_OUTPUT_PATH }}" "DetectionWiki.md"
+        $metadataFile = Join-Path "${{ env.WIKI_OUTPUT_PATH }}" "wiki-metadata.json"
+        
+        # Check if Markdown file exists and has content
+        if (-not (Test-Path $wikiFile)) {
+            Write-Error "❌ Wiki Markdown file not generated: $wikiFile"
+            exit 1
+        }
+        
+        $fileSize = (Get-Item $wikiFile).Length
+        if ($fileSize -lt 1000) {  # Less than 1KB indicates likely empty or error file
+            Write-Error "❌ Wiki file appears to be empty or corrupted (size: $fileSize bytes)"
+            exit 1
+        }
+        
+        # Check metadata file
+        if (-not (Test-Path $metadataFile)) {
+            Write-Error "❌ Wiki metadata file not generated: $metadataFile"
+            exit 1
+        }
+        
+        # Validate Markdown content has required elements
+        $markdownContent = Get-Content $wikiFile -Raw
+        $requiredElements = @(
+            '# Detection Rules Wiki',     # Main title
+            '## 📊 Overview Statistics',  # Statistics section
+            '## 🎯 MITRE ATT&CK Tactics', # MITRE section
+            'github.com/'                 # GitHub repository links
+        )
+        
+        foreach ($element in $requiredElements) {
+            if ($markdownContent -notmatch [regex]::Escape($element)) {
+                Write-Error "❌ Required Markdown element missing: $element"
+                exit 1
+            }
+        }
+        
+        Write-Host "✅ Wiki validation passed" -ForegroundColor Green
+        Write-Host "   File size: $([Math]::Round($fileSize/1KB, 2)) KB" -ForegroundColor Gray
+        Write-Host "   Contains MITRE sections: ✓" -ForegroundColor Gray
+        Write-Host "   Contains GitHub links: ✓" -ForegroundColor Gray
+        
+    - name: Create pull request
+      if: env.SKIP_GENERATION != 'true'
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: |
+          🔄 Update Detection Wiki (${{ env.RULE_COUNT }} rules)
+          
+          - Environment: ${{ env.CONFLUENCE_ENVIRONMENT }}
+          - Generated from: ${{ env.MANIFEST_PATH }}
+          - Total rules: ${{ env.RULE_COUNT }}
+          - Triggered by: ${{ github.event_name }}
+        title: '🔄 Detection Wiki Update - ${{ env.RULE_COUNT }} Rules'
+        body: |
+          ## 📚 Detection Wiki Update
+          
+          This PR contains an automated update to the Detection Wiki based on the current manifest.
+          
+          ### 📊 Summary
+          - **Total Detection Rules**: ${{ env.RULE_COUNT }}
+          - **Source Manifest**: `${{ env.MANIFEST_PATH }}`
+          - **Target Environment**: ${{ env.CONFLUENCE_ENVIRONMENT }}
+          - **Generated On**: ${{ steps.date.outputs.date }}
+          
+          ### 🔍 What's Included
+          - ✅ Confluence-compatible Markdown wiki
+          - ✅ Structured content with statistics and MITRE mapping
+          - ✅ GitHub repository links for each rule
+          - ✅ Professional formatting with tables and badges
+          - ✅ Severity distribution and status indicators
+          
+          ### ⚠️ Manual Review Required
+          This PR requires manual review to ensure:
+          1. 🔒 No non-deprecated alerts are overwritten
+          2. 🔗 All GitHub links are functional
+          3. 📝 Markdown formatting is correct
+          4. � Statistics and metadata are accurate
+          5. 🎯 MITRE ATT&CK mappings are properly linked
+          
+          ### 🚀 Next Steps
+          1. Review the generated wiki file in `${{ env.WIKI_OUTPUT_PATH }}/DetectionWiki.md`
+          2. Verify the metadata in `${{ env.WIKI_OUTPUT_PATH }}/wiki-metadata.json`
+          3. Test Markdown rendering (GitHub preview or Confluence)
+          4. Use Confluence Push Pipeline to publish if approved
+          
+          ### 🔧 Configuration
+          - **Confluence URL**: ${{ env.CONFLUENCE_URL }}
+          - **Space Key**: ${{ env.CONFLUENCE_SPACE_KEY }}
+          - **Environment**: ${{ env.CONFLUENCE_ENVIRONMENT }}
+          
+          ---
+          
+          🤖 This PR was automatically generated by the Detection Wiki Pipeline
+        branch: detection-wiki-update
+        branch-suffix: timestamp
+        delete-branch: true
+        draft: false
+        labels: |
+          documentation
+          automation
+          detection-wiki
+          requires-review
+        assignees: ${{ github.actor }}
+        
+    - name: Summary
+      if: always()
+      shell: pwsh
+      run: |
+        Write-Host ""
+        Write-Host "🏁 Detection Wiki Pipeline Summary" -ForegroundColor Cyan
+        Write-Host "=================================" -ForegroundColor Cyan
+        
+        if ("${{ env.SKIP_GENERATION }}" -eq "true") {
+            Write-Host "ℹ️ Skipped: No changes detected" -ForegroundColor Blue
+        } else {
+            Write-Host "✅ Wiki generated successfully" -ForegroundColor Green
+            Write-Host "   Rules processed: ${{ env.RULE_COUNT }}" -ForegroundColor Gray
+            Write-Host "   Environment: ${{ env.CONFLUENCE_ENVIRONMENT }}" -ForegroundColor Gray
+            Write-Host "   Output: ${{ env.WIKI_OUTPUT_PATH }}/DetectionWiki.md" -ForegroundColor Gray
+        }
+        
+        Write-Host ""
+        Write-Host "📋 Next Steps:" -ForegroundColor Yellow
+        Write-Host "   1. Review the generated pull request" -ForegroundColor White
+        Write-Host "   2. Validate wiki content and formatting" -ForegroundColor White
+        Write-Host "   3. Test search functionality" -ForegroundColor White
+        Write-Host "   4. Merge if everything looks correct" -ForegroundColor White

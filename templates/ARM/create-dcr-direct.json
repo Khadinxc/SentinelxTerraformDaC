@@ -1,0 +1,40 @@
+{
+  "location": "australiaeast",
+  "properties": {
+    "dataCollectionEndpointId": "/subscriptions/[YOUR_AZURE_SUBSCRIPTION_ID]/resourceGroups/rg-sentinel-dev-2/providers/Microsoft.Insights/dataCollectionEndpoints/dce-api-ingestion-dev",
+    "streamDeclarations": {
+      "Custom-MinimalLogs": {
+        "columns": [
+          {
+            "name": "TimeGenerated",
+            "type": "datetime"
+          },
+          {
+            "name": "Message",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    "destinations": {
+      "logAnalytics": [
+        {
+          "workspaceResourceId": "/subscriptions/[YOUR_AZURE_SUBSCRIPTION_ID]/resourceGroups/rg-sentinel-dev-2/providers/Microsoft.OperationalInsights/workspaces/law-sentinel-dev-2",
+          "name": "clv2ws1"
+        }
+      ]
+    },
+    "dataFlows": [
+      {
+        "streams": [
+          "Custom-MinimalLogs"
+        ],
+        "destinations": [
+          "clv2ws1"
+        ],
+        "transformKql": "source | extend TimeGenerated = now()",
+        "outputStream": "Custom-MinimalLogs_CL"
+      }
+    ]
+  }
+}

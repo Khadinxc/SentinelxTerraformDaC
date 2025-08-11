@@ -1,0 +1,18 @@
+display_name: "High Severity Auto Assignment"
+description: "Automatically assign high severity incidents to the security team"
+enabled: true
+order: 100
+conditions:
+  - property: "IncidentSeverity"
+    operator: "Equals"
+    values: ["High"]
+actions:
+  - order: 1
+    action_type: "ModifyProperties"
+    assignee: "security-team@company.com"
+    status: "Active"
+    labels: ["auto-assigned", "high-priority"]
+tags:
+  Team: "Security"
+  Purpose: "Auto-Assignment"
+  Environment: "dev"

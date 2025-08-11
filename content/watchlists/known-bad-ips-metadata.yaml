@@ -1,0 +1,10 @@
+# Watchlist Metadata: Known Bad IP Addresses
+display_name: "Known Bad IP Addresses"
+description: "List of known malicious IP addresses for threat hunting"
+search_key: "IPAddress"
+source: "threat_intelligence"
+enabled: true
+tags:
+  Team: "Security"
+  Purpose: "Threat Intelligence"
+  Environment: "dev"

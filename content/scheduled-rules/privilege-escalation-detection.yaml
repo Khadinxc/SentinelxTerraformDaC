@@ -1,0 +1,40 @@
+display_name: "Privilege Escalation Detection"
+description: "Detects potential privilege escalation activities in Azure AD"
+severity: "High"
+enabled: true
+query: |
+  AuditLogs
+  | where TimeGenerated > ago(1h)
+  | where OperationName in ("Add member to role", "Add app role assignment to user")
+  | where Result == "success"
+  | extend InitiatedBy = tostring(InitiatedBy.user.userPrincipalName)
+  | extend TargetUser = tostring(TargetResources[0].userPrincipalName)
+  | extend RoleName = tostring(TargetResources[0].displayName)
+  | project TimeGenerated, InitiatedBy, TargetUser, RoleName, OperationName
+query_frequency: "PT1H"
+query_period: "PT1H"
+trigger_operator: "GreaterThan"
+trigger_threshold: 0
+suppression_enabled: false
+suppression_duration: "PT1H"
+tactics:
+  - "PrivilegeEscalation"
+  - "Persistence"
+techniques:
+  - "T1078"
+  - "T1098"
+entity_mappings:
+  - entity_type: "Account"
+    field_mappings:
+      - identifier: "FullName"
+        column_name: "InitiatedBy"
+  - entity_type: "Account"
+    field_mappings:
+      - identifier: "FullName"
+        column_name: "TargetUser"
+incident_configuration:
+  create_incident: true
+  grouping_enabled: false
+custom_details: {}
+event_grouping:
+  aggregation_method: "SingleAlert"

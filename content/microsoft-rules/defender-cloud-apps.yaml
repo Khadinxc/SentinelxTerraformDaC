@@ -1,0 +1,6 @@
+display_name: "Microsoft Defender for Cloud Apps - High Severity"
+description: "Creates incidents for high severity alerts from Microsoft Defender for Cloud Apps"
+enabled: true
+product_filter: "Microsoft Cloud App Security"
+alert_rule_template_guid: "b3cfc7c0-092c-481c-a55b-34a3979758cb"
+alert_rule_template_version: "1.0.0"

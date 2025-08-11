@@ -1,0 +1,81 @@
+suppression_enabled: false
+trigger_threshold: 0
+suppression_duration: PT1H
+query: |-
+  let fileAccessThrehold = 10;
+  OfficeActivity
+  | where OfficeWorkload =~ "MicrosoftTeams"
+  | where Operation =~ "MemberAdded"
+  | extend MemberAdded = tostring(parse_json(Members)[0].UPN)
+  | where MemberAdded contains ("#EXT#")
+  | project TimeAdded=TimeGenerated, Operation, MemberAdded, UserWhoAdded = UserId, TeamName
+  | join kind = inner (
+    OfficeActivity
+    | where OfficeWorkload =~ "MicrosoftTeams"
+    | where Operation =~ "MemberRemoved"
+    | extend MemberAdded = tostring(parse_json(Members)[0].UPN)
+    | where MemberAdded contains ("#EXT#")
+    | project TimeDeleted=TimeGenerated, Operation, MemberAdded, UserWhoDeleted = UserId, TeamName
+    ) on MemberAdded
+  | where TimeDeleted > TimeAdded
+  | join kind=inner (
+    OfficeActivity
+    | where RecordType == "SharePointFileOperation"
+    | where SourceRelativeUrl has "Microsoft Teams Chat Files"
+    | where Operation == "FileUploaded"
+    | extend MemberAdded = UserId
+    | join kind = inner (
+        OfficeActivity
+        | where RecordType == "SharePointFileOperation"
+        | where Operation  == "FileAccessed"
+        | where SourceRelativeUrl has "Microsoft Teams Chat Files"
+        | summarize FileAccessCount = count() by OfficeObjectId
+        | where FileAccessCount > fileAccessThrehold
+        ) on $left.OfficeObjectId == $right.OfficeObjectId
+    )on MemberAdded
+  | project-away MemberAdded1, MemberAdded2, OfficeObjectId1, Operation1, Operation2, TeamName1, TeamName2
+  | extend MemberAddedAccountName = tostring(split(MemberAdded, "@")[0]), MemberAddedAccountUPNSuffix = tostring(split(MemberAdded, "@")[1])
+  | extend UserWhoAddedAccountName = tostring(split(UserWhoAdded, "@")[0]), UserWhoAddedAccountUPNSuffix = tostring(split(UserWhoAdded, "@")[1])
+  | extend UserWhoDeletedAccountName = tostring(split(UserWhoDeleted, "@")[0]), UserWhoDeletedAccountUPNSuffix = tostring(split(UserWhoDeleted, "@")[1])
+enabled: true
+severity: Low
+description: This detection identifies when an external user is added to a Team or Teams chat and shares a file which is accessed by many users (>10) and the users is removed within short period of time. This might be an indicator of suspicious activity.
+techniques:
+- T1566
+alert_rule_template_version: 2.1.1
+query_period: PT1H
+query_frequency: PT1H
+display_name: Accessed files shared by temporary external user
+tactics:
+- InitialAccess
+trigger_operator: GreaterThan
+entity_mappings:
+- entity_type: Account
+  field_mappings:
+  - column_name: MemberAdded
+    identifier: FullName
+  - column_name: MemberAddedAccountName
+    identifier: Name
+  - column_name: MemberAddedAccountUPNSuffix
+    identifier: UPNSuffix
+- entity_type: Account
+  field_mappings:
+  - column_name: UserWhoAdded
+    identifier: FullName
+  - column_name: UserWhoAddedAccountName
+    identifier: Name
+  - column_name: UserWhoAddedAccountUPNSuffix
+    identifier: UPNSuffix
+- entity_type: Account
+  field_mappings:
+  - column_name: UserWhoDeleted
+    identifier: FullName
+  - column_name: UserWhoDeletedAccountName
+    identifier: Name
+  - column_name: UserWhoDeletedAccountUPNSuffix
+    identifier: UPNSuffix
+- entity_type: IP
+  field_mappings:
+  - column_name: ClientIP
+    identifier: Address
+

@@ -1,0 +1,33 @@
+display_name: "Large Data Download Detection"
+description: "Detects unusually large data downloads that may indicate data exfiltration"
+severity: "Medium"
+enabled: false
+query: |
+  OfficeActivity
+  | where TimeGenerated > ago(1h)
+  | where Operation in ("FileDownloaded", "FileDownloadedPreview")
+  | summarize TotalDownloads = count() by UserId, bin(TimeGenerated, 10m)
+  | where TotalDownloads > 50
+  | project TimeGenerated, UserId, TotalDownloads
+query_frequency: "PT1H"
+query_period: "PT1H"
+trigger_operator: "GreaterThan"
+trigger_threshold: 0
+suppression_enabled: false
+suppression_duration: "PT1H"
+tactics:
+  - "Exfiltration"
+techniques:
+  - "T1041"
+entity_mappings:
+  - entity_type: "Account"
+    field_mappings:
+      - identifier: "FullName"
+        column_name: "UserId"
+incident_configuration:
+  create_incident: true
+  grouping_enabled: false
+custom_details:
+  TotalDownloads: "TotalDownloads"
+event_grouping:
+  aggregation_method: "SingleAlert"

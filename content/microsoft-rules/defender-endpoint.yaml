@@ -1,0 +1,6 @@
+display_name: "Microsoft Defender for Endpoint"
+description: "Creates incidents for alerts from Microsoft Defender for Endpoint"
+enabled: true
+product_filter: "Microsoft Defender Advanced Threat Protection"
+alert_rule_template_guid: "532c1811-79ee-4d9f-8d4d-6304c840daa1"
+alert_rule_template_version: "1.0.0"

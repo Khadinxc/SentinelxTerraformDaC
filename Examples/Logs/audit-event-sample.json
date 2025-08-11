@@ -1,0 +1,70 @@
+[
+  {
+    "timestamp": "2024-08-08T18:10:15.123Z",
+    "object": "SecurityPolicy",
+    "operation": "PolicyChange",
+    "user": "admin",
+    "user_id": "S-1-5-21-123456789-123456789-123456789-1001",
+    "domain": "contoso.com",
+    "result": "Success",
+    "details": "Password policy updated: minimum length changed to 12 characters",
+    "src_ip": "10.0.0.5",
+    "hostname": "DC-01",
+    "vendor": "Microsoft",
+    "product": "Active Directory",
+    "severity": "Medium"
+  },
+  {
+    "timestamp": "2024-08-08T18:15:30.456Z",
+    "target": "UserAccount",
+    "action": "UserCreated",
+    "username": "security.admin",
+    "user_id": "admin@contoso.com",
+    "result": "Success",
+    "value": "New privileged user account created: security.admin",
+    "client_ip": "192.168.1.10",
+    "src_hostname": "ADMIN-WORKSTATION",
+    "hostname": "audit-server",
+    "vendor": "Microsoft",
+    "product": "Azure AD",
+    "severity": "High"
+  },
+  {
+    "timestamp": "2024-08-08T18:20:45.789Z",
+    "object": "FilePermissions",
+    "operation": "PermissionChange",
+    "user": "system.admin",
+    "result": "Success",
+    "details": "File permissions modified for C:\\Confidential\\financial-data.xlsx",
+    "hostname": "FILE-SERVER-01",
+    "device_ip": "10.0.2.15",
+    "vendor": "Microsoft",
+    "product": "Windows Security"
+  },
+  {
+    "timestamp": "2024-08-08T18:25:12.321Z",
+    "object": "DatabaseAccess",
+    "operation": "LoginAttempt",
+    "user": "db.admin",
+    "result": "Failure",
+    "details": "Failed database login attempt - invalid credentials",
+    "src_ip": "172.16.1.50",
+    "hostname": "SQL-SERVER-02",
+    "vendor": "Microsoft",
+    "product": "SQL Server",
+    "severity": "Medium"
+  },
+  {
+    "timestamp": "2024-08-08T18:30:55.654Z",
+    "target": "SystemConfiguration",
+    "action": "ConfigurationChange",
+    "username": "network.admin",
+    "result": "Success",
+    "value": "Firewall rule added: Block traffic from 185.220.0.0/16",
+    "client_ip": "10.0.0.100",
+    "hostname": "firewall-mgmt",
+    "vendor": "Fortinet",
+    "product": "FortiManager",
+    "severity": "Informational"
+  }
+]

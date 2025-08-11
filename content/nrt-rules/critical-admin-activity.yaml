@@ -1,0 +1,54 @@
+# Sample NRT Rule: Critical Admin Activity Detection
+display_name: "Critical Admin Activity Detection-v2"
+description: "Near real-time detection of critical administrative activities that require immediate attention"
+severity: "High"
+enabled: true
+query: |
+  AzureActivity
+  | where TimeGenerated > ago(1m)
+  | where OperationNameValue in ("Microsoft.Compute/virtualMachines/write", 
+                                 "Microsoft.Authorization/roleAssignments/write",
+                                 "Microsoft.KeyVault/vaults/secrets/write",
+                                 "Microsoft.Storage/storageAccounts/write")
+  | where ActivityStatusValue == "Success"
+  | where CallerIpAddress !startswith "10." and CallerIpAddress !startswith "192.168."
+  | extend AdminActivity = OperationNameValue
+  | extend RiskScore = case(
+      OperationNameValue contains "roleAssignments", 90,
+      OperationNameValue contains "KeyVault", 85,
+      OperationNameValue contains "virtualMachines", 75,
+      60
+  )
+  | where RiskScore >= 75
+  | project TimeGenerated, Caller, CallerIpAddress, AdminActivity, RiskScore, ResourceGroup, SubscriptionId
+suppression_enabled: false
+tactics:
+  - "PrivilegeEscalation"
+  - "Persistence"
+techniques:
+  - "T1078"
+  - "T1098"
+entity_mappings:
+  - entity_type: "Account"
+    field_mappings:
+      - identifier: "Name"
+        column_name: "Caller"
+  - entity_type: "IP"
+    field_mappings:
+      - identifier: "Address"
+        column_name: "CallerIpAddress"
+incident_configuration:
+  create_incident_enabled: true
+  grouping:
+    enabled: true
+    lookback_duration: "PT5M"
+    entity_matching_method: "Selected"
+custom_details:
+  AdminActivity: "AdminActivity"
+  RiskScore: "RiskScore"
+  CallerIP: "CallerIpAddress"
+tags:
+  Team: "Security"
+  Priority: "Critical"
+  Type: "NRT"
+  Environment: "dev"

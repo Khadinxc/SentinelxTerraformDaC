@@ -1,0 +1,10 @@
+# Watchlist Metadata: Suspicious Domains
+display_name: "Suspicious Domains Watchlist"
+description: "List of known malicious and suspicious domains for threat hunting"
+search_key: "Domain"
+source: "threat_intelligence"
+enabled: true
+tags:
+  Team: "Security"
+  Purpose: "Threat Intelligence"
+  Environment: "dev"

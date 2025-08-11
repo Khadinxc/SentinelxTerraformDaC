@@ -1,0 +1,34 @@
+[
+  {
+    "timestamp": "2024-01-15T14:15:00.000Z",
+    "source": "Firewall",
+    "message": "Connection blocked",
+    "severity": "Warning",
+    "action": "DENY",
+    "protocol": "TCP",
+    "sourceIP": "198.51.100.25",
+    "destinationIP": "10.0.2.100", 
+    "destinationPort": 3389,
+    "rule": "RDP_BLOCK_EXTERNAL"
+  },
+  {
+    "timestamp": "2024-01-15T14:16:00.000Z",
+    "source": "DNS",
+    "message": "Suspicious domain query",
+    "severity": "High",
+    "queryType": "A",
+    "domain": "malicious-domain.evil",
+    "sourceIP": "10.0.1.75",
+    "responseCode": "NXDOMAIN"
+  },
+  {
+    "timestamp": "2024-01-15T14:17:00.000Z",
+    "source": "Endpoint",
+    "message": "Malware detected",
+    "severity": "Critical",
+    "hostname": "WORKSTATION-01",
+    "filePath": "C:\\Users\\jdoe\\Downloads\\suspicious.exe",
+    "threatName": "Trojan:Win32/Generic",
+    "action": "QUARANTINED"
+  }
+]

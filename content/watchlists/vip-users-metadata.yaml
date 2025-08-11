@@ -1,0 +1,10 @@
+# Watchlist Metadata: VIP Users
+display_name: "VIP Users Watchlist"
+description: "List of VIP users requiring special monitoring and alerting"
+search_key: "UserPrincipalName"
+source: "internal_directory"
+enabled: true
+tags:
+  Team: "Security"
+  Purpose: "VIP Monitoring"
+  Environment: "dev"

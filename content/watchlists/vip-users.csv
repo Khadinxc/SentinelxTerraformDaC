@@ -1,0 +1,5 @@
+UserPrincipalName,Role,Department,RiskLevel,AlertPriority
+ceo@company.com,CEO,Executive,Critical,High
+cfo@company.com,CFO,Finance,Critical,High
+ciso@company.com,CISO,Security,Critical,High
+hr.director@company.com,HR Director,Human Resources,High,Medium

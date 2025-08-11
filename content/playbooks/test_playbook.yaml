@@ -1,0 +1,40 @@
+name: "incident-response-playbook"
+display_name: "Incident Response Playbook"
+description: "Automated response playbook for high-severity security incidents"
+enabled: true
+playbook_type: "Incident"  # Incident, Notification, Investigation, Remediation
+severity: "High"
+trigger_type: "Sentinel"   # Sentinel, HTTP, Schedule, Manual
+author: "SentinelDaC"
+version: "1.0"
+
+# Actions to be performed by the playbook
+actions:
+  - name: "send_teams_notification"
+    type: "http"
+    inputs:
+      method: "POST"
+      uri: "https://outlook.office.com/webhook/YOUR-TEAMS-WEBHOOK-URL"
+      body: |
+        {
+          "text": "🚨 High Severity Incident Alert",
+          "sections": [{
+            "facts": [
+              {"name": "Incident ID", "value": "@{triggerBody()?['object']?['properties']?['incidentNumber']}"},
+              {"name": "Title", "value": "@{triggerBody()?['object']?['properties']?['title']}"},
+              {"name": "Severity", "value": "@{triggerBody()?['object']?['properties']?['severity']}"},
+              {"name": "Status", "value": "@{triggerBody()?['object']?['properties']?['status']}"}
+            ]
+          }]
+        }
+  - name: "assign_incident"
+    type: "microsoft_sentinel"
+    inputs:
+      action: "assign"
+      assignee: "security-team@company.com"
+
+# Additional tags
+tags:
+  Team: "Security"
+  Purpose: "Incident Response"
+  Environment: "dev"

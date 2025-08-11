@@ -1,0 +1,20 @@
+display_name: "Automatic Threat Intelligence Enrichment"
+description: "Automatically enrich medium and high severity incidents with threat intelligence data"
+enabled: true
+order: 300
+conditions:
+  - property: "IncidentSeverity"
+    operator: "Equals"
+    values: ["High"]
+actions:
+  - order: 1
+    action_type: "RunPlaybook"
+    # NOTE: Replace with your actual subscription ID and resource group
+    logic_app_resource_id: "/subscriptions/[YOUR_AZURE_SUBSCRIPTION_ID]/resourceGroups/rg-sentinel-dev/providers/Microsoft.Logic/workflows/enrich-incident-python-script-webhook-caller"
+    tenant_id: "[YOUR_AZURE_TENANT_ID]"
+tags:
+  Team: "Security"
+  Purpose: "Threat Intelligence"
+  Environment: "dev"
+  PlaybookType: "Investigation"
+  ExecutionType: "Script"

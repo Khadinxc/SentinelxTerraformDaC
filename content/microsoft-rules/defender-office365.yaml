@@ -1,0 +1,6 @@
+display_name: "Microsoft Defender for Office 365"
+description: "Creates incidents for alerts from Microsoft Defender for Office 365"
+enabled: true
+product_filter: "Office 365 Advanced Threat Protection"
+alert_rule_template_guid: "fa747fb8-81d6-4965-8d3b-34e0c0b676c8"
+alert_rule_template_version: "1.0.0"

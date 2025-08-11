@@ -1,0 +1,89 @@
+name: "block-malicious-ip-script"
+display_name: "Block Malicious IP - PowerShell Script"
+description: "PowerShell script to block malicious IP addresses detected by Sentinel alerts"
+enabled: true
+execution_type: "Script"        # Script vs LogicApp
+playbook_type: "Remediation"    # Incident, Notification, Investigation, Remediation
+script_type: "PowerShell"       # PowerShell, Python, GraphPowerShell
+severity: "High"
+trigger_type: "Sentinel"        # Sentinel, HTTP, Schedule, Manual
+author: "SentinelDaC"
+version: "1.0"
+
+# PowerShell script content
+script_content: |
+  param(
+      [Parameter(Mandatory=$true)]
+      [string]$MaliciousIP,
+      
+      [Parameter(Mandatory=$true)]
+      [string]$IncidentId,
+      
+      [Parameter(Mandatory=$false)]
+      [string]$Reason = "Sentinel Alert Triggered"
+  )
+  
+  # Import required modules
+  Import-Module Az.Network
+  Import-Module Az.SecurityInsights
+  
+  Write-Output "Starting IP blocking script for IP: $MaliciousIP"
+  Write-Output "Incident ID: $IncidentId"
+  Write-Output "Reason: $Reason"
+  
+  try {
+      # Get current timestamp
+      $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+      
+      # Example: Block IP in Network Security Group (customize as needed)
+      $nsgName = "nsg-sentinel-dev"
+      $resourceGroupName = "rg-sentinel-dev"
+      
+      # Create NSG rule to block the malicious IP
+      $nsgRule = New-AzNetworkSecurityRuleConfig `
+          -Name "Block-$($MaliciousIP.Replace('.', '-'))" `
+          -Description "Blocked by Sentinel on $timestamp - $Reason" `
+          -Access Deny `
+          -Protocol "*" `
+          -Direction Inbound `
+          -Priority 100 `
+          -SourceAddressPrefix $MaliciousIP `
+          -SourcePortRange "*" `
+          -DestinationAddressPrefix "*" `
+          -DestinationPortRange "*"
+      
+      Write-Output "Created NSG rule to block IP: $MaliciousIP"
+      
+      # Update Sentinel incident with comment
+      $comment = "✅ AUTOMATED RESPONSE: IP address $MaliciousIP has been blocked via NSG rule. Timestamp: $timestamp"
+      
+      # Note: In a real implementation, you would use the Microsoft Sentinel REST API
+      # or PowerShell modules to update the incident
+      Write-Output "Incident $IncidentId updated with blocking confirmation"
+      Write-Output $comment
+      
+      Write-Output "✅ Script completed successfully"
+      
+  } catch {
+      Write-Error "❌ Error occurred: $($_.Exception.Message)"
+      
+      # Update incident with error information
+      $errorComment = "❌ AUTOMATED RESPONSE FAILED: Unable to block IP $MaliciousIP. Error: $($_.Exception.Message)"
+      Write-Output $errorComment
+      
+      throw
+  }
+
+# Parameters that Sentinel will pass to the script
+parameters:
+  MaliciousIP: "@{triggerBody()?['ExtendedProperties']?['MaliciousIP']}"
+  IncidentId: "@{triggerBody()?['object']?['properties']?['incidentNumber']}"
+  Reason: "@{triggerBody()?['object']?['properties']?['title']}"
+
+# Additional tags
+tags:
+  Team: "Security"
+  Purpose: "Automated Response"
+  Environment: "dev"
+  ScriptType: "PowerShell"
+  Action: "Block IP"

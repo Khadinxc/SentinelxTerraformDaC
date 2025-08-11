@@ -1,0 +1,6 @@
+display_name: "Microsoft Defender for Cloud"
+description: "Creates incidents for alerts from Microsoft Defender for Cloud"
+enabled: true
+product_filter: "Azure Security Center"
+alert_rule_template_guid: "90586451-8746-4b0f-aa5d-24520e93b17a"
+alert_rule_template_version: "1.0.0"
